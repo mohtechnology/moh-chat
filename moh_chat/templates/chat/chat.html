@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="chat-container my-4">
+    <h3 style="color:black;">Chat with {{ r.username }}</h3>
+    <div id="chatBox" class="chat-messages border p-3" style="height: 400px; overflow-y: scroll;">
+        {% for message in messages %}
+        {% if message.sender == request.user %}
+        <div class="message sender-message">
+            <p>{{ message.content }}</p>
+            <small class="timestamp">{{ message.timestamp|date:"H:i" }}</small>
+        </div>
+        {% else %}
+        <div class="message receiver-message">
+            <p>{{ message.content }}</p>
+            <small class="timestamp">{{ message.timestamp|date:"H:i" }}</small>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    <form method="POST" id="messageForm" style="position: sticky; bottom: 10px;">
+        {% csrf_token %}
+        <div class="input-group mt-3">
+            <input type="text" name="msg" id="messageInput" class="form-control" placeholder="Type your message here...">
+            <button type="submit" class="btn btn-primary">Send</button>
+        </div>
+    </form>
+</div>
+
+<style>
+    .chat-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+}
+#chatBox {
+    height: 400px; /* or your desired height */
+    overflow-y: auto;
+}    
+.chat-messages {
+    display: flex;
+    flex-direction: column;
+}
+.message {
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 5px;
+    max-width: 70%;
+    position: relative;
+}
+.sender-message {
+    align-self: flex-end;
+    background-color: #e1ffc7;
+    color: #000;
+}
+.receiver-message {
+    align-self: flex-start;
+    background-color: #c7d4ff;
+    color: #000;
+}
+.timestamp {
+    display: block;
+    text-align: right;
+    font-size: 0.75em;
+    margin-top: 5px;
+    color: #555;
+}
+p {
+    margin: 0;
+}
+</style>
+<script>
+    let isUserScrolling = false;
+    let isFirstLoad = true; // Used to detect the initial page load
+
+    const chatBox = document.getElementById('chatBox');
+
+    // Detect user scrolling interaction
+    chatBox.addEventListener('scroll', () => {
+        isUserScrolling = chatBox.scrollTop + chatBox.clientHeight < chatBox.scrollHeight - 50;
+    });
+
+    function fetchMessages() {
+        fetch('/chat/{{ r.username }}/get_messages/')
+            .then(response => response.json())
+            .then(data => {
+                const currentMessages = chatBox.querySelectorAll('.message').length;
+                if (data.messages.length !== currentMessages) {
+                    chatBox.innerHTML = ''; // Clear current messages
+
+                    data.messages.forEach(msg => {
+                        const messageElement = document.createElement('div');
+                        messageElement.classList.add('message');
+                        if (msg.sender === '{{ request.user.username }}') {
+                            messageElement.classList.add('sender-message');
+                        } else {
+                            messageElement.classList.add('receiver-message');
+                        }
+                        messageElement.innerHTML = `<p>${msg.content}</p><small class="timestamp">${msg.timestamp}</small>`;
+                        chatBox.appendChild(messageElement);
+                    });
+
+                    // Scroll to the bottom on the initial load or when a new message is added
+                    if (isFirstLoad || !isUserScrolling) {
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                        isFirstLoad = false; // Set to false after the first load
+                    }
+                }
+            }).catch(error => {
+                console.error('Error fetching messages:', error);
+            });
+    }
+
+    // Initial scroll to the bottom when the page loads
+    window.onload = function() {
+        fetchMessages();
+        chatBox.scrollTop = chatBox.scrollHeight; // Scroll to the bottom on load
+    };
+
+    // Refresh the chat every 1 second
+    setInterval(fetchMessages, 1000);
+
+    document.getElementById('messageForm').onsubmit = function(event) {
+        event.preventDefault();
+        const msgInput = document.getElementById('messageInput');
+        const msg = msgInput.value;
+
+        if (msg.trim() !== '') {
+            fetch('', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `msg=${encodeURIComponent(msg)}`
+            }).then(() => {
+                msgInput.value = '';
+                fetchMessages(); // Refresh after sending
+
+                // Scroll to the bottom after sending a message
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }).catch(error => {
+                console.error('Error sending message:', error);
+            });
+        }
+    };
+</script>
+{% endblock %}
